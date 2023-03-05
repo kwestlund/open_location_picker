@@ -114,7 +114,8 @@ class ViewBox extends LatLngBounds {
     return {
       "bounded": bounded ? "1" : "0",
       "viewbox":
-          "${southWest?.latitude},${southWest?.longitude},${northEast?.latitude},${northEast?.longitude}",
+          /// KPW -- nominatim.openstreetmap.org requires lon first then lat!
+          "${southWest?.longitude},${southWest?.latitude},${northEast?.longitude},${northEast?.latitude}",
     };
   }
 }

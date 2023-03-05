@@ -64,11 +64,8 @@ class _MapAppBarState extends State<MapAppBar> {
         ));
         Locale locale = Localizations.localeOf(context);
 
-        var results = await Reverse.search(
-          locale: locale,
-          searchFilters: widget.searchFilters,
-          query: query,
-        );
+        /// KPW
+        var results = await boundedSearch(locale, query);
         widget.bloc.emit(OpenMapState.results(
           selected: state.selected,
           query: query,
@@ -203,5 +200,69 @@ class _MapAppBarState extends State<MapAppBar> {
         );
       },
     );
+  }
+
+  /// KPW
+  Future<List<FormattedLocation>> boundedSearch(
+      Locale locale, String query) async {
+    // start expanding search with location center in map bounds
+    if (widget.controller.bounds == null) return [];
+    return await expandingSearch(locale, query, widget.controller.bounds!.center,
+        widget.controller.bounds, ReverseZoom.majorStreets);
+  }
+
+  expandingSearch(Locale locale, String query, LatLng location,
+      LatLngBounds? bounds, ReverseZoom? zoom) async {
+    List<FormattedLocation> results = await Reverse.search(
+      locale: locale,
+      searchFilters: applyBounds(widget.searchFilters, bounds),
+      query: query,
+    );
+    if (results.isNotEmpty) return results;
+    if (zoom == null) return null;
+    zoom = expandZoom(zoom);
+    return expandingSearch(locale, query, location,
+        await expandBounds(locale, location, zoom), zoom);
+  }
+
+  SearchFilters? applyBounds(
+      SearchFilters? searchFilters, LatLngBounds? bounds) {
+    if (bounds == null ||
+        bounds.southWest == null ||
+        bounds.northEast == null) {
+      return searchFilters;
+    }
+    return SearchFilters(
+        countryCodes: searchFilters?.countryCodes,
+        excludePlaceIds: searchFilters?.excludePlaceIds,
+        limit: searchFilters?.limit,
+        // use view bounds as default search bounds
+        viewBox: searchFilters?.viewBox ??
+            ViewBox(bounds.southWest!, bounds.northEast!, true),
+        email: searchFilters?.email,
+        dedupe: searchFilters?.dedupe);
+  }
+
+  Future<LatLngBounds?> expandBounds(
+      locale, LatLng location, ReverseZoom? zoom) async {
+    if (zoom == null) return null;
+    FormattedLocation formattedLocation = await Reverse.reverseLocation(
+        locale: locale, location: location, zoom: zoom);
+    return formattedLocation.boundingBox;
+  }
+
+  ReverseZoom? expandZoom(ReverseZoom zoom) {
+    switch (zoom) {
+      case ReverseZoom.suburb:
+        return ReverseZoom.city;
+      case ReverseZoom.majorStreets:
+        return ReverseZoom.suburb;
+      case ReverseZoom.majorAndMinorStreets:
+        return ReverseZoom.majorStreets;
+      case ReverseZoom.building:
+        return ReverseZoom.majorAndMinorStreets;
+      default:
+        return null;
+    }
   }
 }
