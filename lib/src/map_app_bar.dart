@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:open_location_picker/open_location_picker.dart';
 
 /// search app bar
-class MapAppBar extends StatefulWidget with PreferredSizeWidget {
+class MapAppBar extends StatefulWidget implements PreferredSizeWidget {
   final OpenMapBloc bloc;
   final MapController controller;
   final ValueChanged<SelectedLocation>? onDone;
@@ -147,7 +147,7 @@ class _MapAppBarState extends State<MapAppBar> {
                     const CircularProgressIndicator.adaptive()),
           ),
           backgroundColor: Theme.of(context).colorScheme.surface,
-          titleTextStyle: Theme.of(context).textTheme.bodyText1,
+          titleTextStyle: Theme.of(context).textTheme.bodyLarge,
           iconTheme: Theme.of(context).iconTheme,
           elevation: state.maybeMap(
             orElse: () => 4,
