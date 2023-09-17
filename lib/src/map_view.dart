@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/plugin_api.dart';
@@ -14,7 +16,8 @@ import 'search_results.dart';
 import 'selected_location_view.dart';
 import 'shapes.dart';
 
-typedef MyLocationButtonCallBack = Widget Function(Function(LatLng destLocation, [double destZoom]) callback);
+typedef MyLocationButtonCallBack = Widget Function(
+    Function(LatLng destLocation, [double destZoom]) callback);
 
 /// Map screen
 /// - it can be used to display location
@@ -33,6 +36,25 @@ class OpenStreetMaps extends StatefulWidget {
   /// You can set it also using `OpenMapSettings`
   final MyLocationButtonCallBack? myLocationButton;
 
+  /// override the default map
+  /// - use this if you want to use other map or other server
+  /// - you can also use it to change the dark map
+  /// * default is
+  ///
+  /// ```dart
+  /// return TileLayerOptions(
+  ///   urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+  ///   subdomains: ['a', 'b', 'c'],
+  ///   tileBuilder: (context, tileWidget, tile) {
+  ///     if (!isDark) return tileWidget;
+  ///     return ColorFiltered(
+  ///       colorFilter: ColorFilter.mode(background, BlendMode.saturation),
+  ///       child: tileWidget,
+  ///     );
+  ///   },
+  /// );
+  /// ```
+  ///
   /// You can override how map images downloaded
   /// You can cache images like that
   /// ``` dart
@@ -47,8 +69,7 @@ class OpenStreetMaps extends StatefulWidget {
   ///   }
   /// }
   /// ```
-  /// You can set it also using `OpenMapSettings`
-  final TileProvider? tileProvider;
+  final TileLayer Function(TileLayer defaultLayer)? tileLayer;
 
   /// call back on pressing to done button
   /// You can set it also using `OpenMapSettings`
@@ -69,7 +90,7 @@ class OpenStreetMaps extends StatefulWidget {
     Key? key,
     required this.options,
     this.bloc,
-    this.tileProvider,
+    this.tileLayer,
     this.myLocationButton,
     this.onDone,
     this.searchHint,
@@ -80,7 +101,8 @@ class OpenStreetMaps extends StatefulWidget {
   @override
   State<OpenStreetMaps> createState() => _OpenStreetMapsState();
 
-  static Future<FormattedLocation> getMyCurrentLocation(BuildContext context) async {
+  static Future<FormattedLocation> getMyCurrentLocation(
+      BuildContext context) async {
     var getCurrentLocation = OpenMapSettings.of(context)?.getCurrentLocation;
     if (getCurrentLocation == null) {
       throw FlutterError('You should add getCurrentLocation in map config');
@@ -101,12 +123,14 @@ class OpenStreetMaps extends StatefulWidget {
   }
 }
 
-class _OpenStreetMapsState extends State<OpenStreetMaps> with TickerProviderStateMixin {
-  late final _MapControllerImpl _controller;
+class _OpenStreetMapsState extends State<OpenStreetMaps>
+    with TickerProviderStateMixin {
+  late final MapController _controller;
   late final _MyAnimationController _animationController;
+
   @override
   void initState() {
-    _controller = _MapControllerImpl();
+    _controller = MapController();
     _animationController = _MyAnimationController(this);
     super.initState();
   }
@@ -131,8 +155,13 @@ class _OpenStreetMapsState extends State<OpenStreetMaps> with TickerProviderStat
             bloc.emit(OpenMapState.selected(SelectedLocation.single(result)));
           },
           multi: (old) {
-            var exists = old.any((element) => element.identifier == result.identifier);
-            var newList = exists ? old.map((e) => e.identifier == result.identifier ? result : e).toList() : [result, ...old];
+            var exists =
+                old.any((element) => element.identifier == result.identifier);
+            var newList = exists
+                ? old
+                    .map((e) => e.identifier == result.identifier ? result : e)
+                    .toList()
+                : [result, ...old];
             bloc.emit(OpenMapState.selected(SelectedLocation.multi(newList)));
           },
         );
@@ -148,7 +177,7 @@ class _OpenStreetMapsState extends State<OpenStreetMaps> with TickerProviderStat
     }
   }
 
-  void _onMapCreated(MapController controller, OpenMapSettings? settings) async {
+  void _onMapReady(OpenMapSettings? settings) async {
     try {
       if (widget.options.center != null) return;
       if (widget.options.bounds != null) return;
@@ -212,12 +241,9 @@ class _OpenStreetMapsState extends State<OpenStreetMaps> with TickerProviderStat
   }
 
   void fitBounds(LatLngBounds bounds) {
-    if (!bounds.isValid) {
-      throw Exception('Bounds are not valid.');
-    }
-    var target = _controller._state.getBoundsCenterZoom(
+    var target = _controller.centerZoomFitBounds(
       bounds,
-      const FitBoundsOptions(padding: EdgeInsets.all(12.0)),
+      options: const FitBoundsOptions(padding: EdgeInsets.all(12.0)),
     );
     moveTo(target.center, target.zoom);
   }
@@ -236,12 +262,12 @@ class _OpenStreetMapsState extends State<OpenStreetMaps> with TickerProviderStat
     if (myCurrentLocation == null && settings?.getCurrentLocation != null) {
       myCurrentLocation = MyLocationButton(
         moveTo: moveTo,
-        selectCurrentLocationIcon: settings?.mapViewConfig?.selectCurrentLocationIcon,
+        selectCurrentLocationIcon:
+            settings?.mapViewConfig?.selectCurrentLocationIcon,
       );
     }
     var options = widget.options.create(
-      controller: _controller,
-      onMapCreated: (_) => _onMapCreated(_, settings),
+      onMapReady: () => _onMapReady(settings),
       onTap: (_, pos) => _onTap(pos),
     );
     var bloc = widget.bloc;
@@ -257,10 +283,13 @@ class _OpenStreetMapsState extends State<OpenStreetMaps> with TickerProviderStat
             searchFilters: widget.searchFilters ?? settings?.searchFilters,
             zoomInIcon: settings?.mapViewConfig?.zoomInIcon,
             zoomOutIcon: settings?.mapViewConfig?.zoomOutIcon,
-            searchLoadingIndicator: settings?.mapViewConfig?.searchLoadingIndicator,
+            searchLoadingIndicator:
+                settings?.mapViewConfig?.searchLoadingIndicator,
             searchDoneIcon: settings?.mapViewConfig?.searchDoneIcon,
             mapBackIcon: settings?.mapViewConfig?.mapBackIcon,
-            searchHint: widget.searchHint ?? settings?.searchHint?.call(context) ?? 'Search here',
+            searchHint: widget.searchHint ??
+                settings?.searchHint?.call(context) ??
+                'Search here',
           ),
           bottomNavigationBar: SelectedLocationView(
             bloc: bloc,
@@ -288,29 +317,9 @@ class _OpenStreetMapsState extends State<OpenStreetMaps> with TickerProviderStat
   FlutterMap _buildMap(MapOptions options, OpenMapSettings? settings) {
     var background = Theme.of(context).scaffoldBackgroundColor;
     var isDark = Theme.of(context).brightness == Brightness.dark;
-    var layerOptions = settings?.getMapTileOptions ?? _getLayerOptions;
-    return FlutterMap(
-      options: options,
-      mapController: _controller,
-      children: [
-        TileLayerWidget(
-          options: layerOptions(isDark, background, widget.tileProvider ?? settings?.defaultTileProvider),
-        ),
-        if (widget.bloc != null) ...[
-          MapPolygons(bloc: widget.bloc!),
-          MapCircles(bloc: widget.bloc!),
-          MapPolylines(bloc: widget.bloc!),
-          MapMarkers(bloc: widget.bloc!),
-        ],
-        if (settings?.currentLocationMarker != null || settings?.getLocationStream != null) const MyCurrentLocationMarker()
-      ],
-    );
-  }
-
-  TileLayerOptions _getLayerOptions(bool isDark, Color background, TileProvider? provider) {
-    return TileLayerOptions(
+    var defaultTitle = TileLayer(
       urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-      subdomains: ['a', 'b', 'c'],
+      subdomains: const ['a', 'b', 'c'],
       tileBuilder: (context, tileWidget, tile) {
         if (!isDark || kIsWeb) return tileWidget;
         return ColorFiltered(
@@ -318,27 +327,35 @@ class _OpenStreetMapsState extends State<OpenStreetMaps> with TickerProviderStat
           child: tileWidget,
         );
       },
-      tileProvider: provider,
+    );
+    return FlutterMap(
+      options: options,
+      mapController: _controller,
+      children: [
+        (widget.tileLayer ?? settings?.tileLayer)?.call(defaultTitle) ??
+            defaultTitle,
+        if (widget.bloc != null) ...[
+          MapPolygons(bloc: widget.bloc!),
+          MapCircles(bloc: widget.bloc!),
+          MapPolylines(bloc: widget.bloc!),
+          MapMarkers(bloc: widget.bloc!),
+        ],
+        if (settings?.currentLocationMarker != null ||
+            settings?.getLocationStream != null)
+          const MyCurrentLocationMarker()
+      ],
     );
   }
 }
 
 class _MyAnimationController extends AnimationController {
-  _MyAnimationController(TickerProvider vsync) : super(vsync: vsync, duration: const Duration(milliseconds: 400));
+  _MyAnimationController(TickerProvider vsync)
+      : super(vsync: vsync, duration: const Duration(milliseconds: 400));
 
   @override
   void reset() {
     clearListeners();
     clearStatusListeners();
     super.reset();
-  }
-}
-
-class _MapControllerImpl extends MapControllerImpl {
-  late MapState _state;
-  @override
-  set state(MapState state) {
-    super.state = state;
-    _state = state;
   }
 }

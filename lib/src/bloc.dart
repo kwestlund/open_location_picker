@@ -19,6 +19,7 @@ abstract class OpenMapBloc {
 
 @freezed
 class OpenMapState with _$OpenMapState {
+  // const factory OpenMapState.initial() = _Initial;
   const factory OpenMapState.selected(SelectedLocation selected) = _Selected;
   const factory OpenMapState.reversing(
       SelectedLocation selected, LatLng reversing) = _Reversing;
@@ -66,8 +67,11 @@ class Reverse {
     );
     var response = await http.get(url);
 
-    var parsed = jsonDecode(response.body);
-    return FormattedLocation.fromJson(parsed);
+    var parsed = jsonDecode(utf8.decode(response.bodyBytes));
+    return FormattedLocation.fromJson(parsed).copyWith(
+      lat: location.latitude,
+      lon: location.longitude,
+    );
   }
 
   static Future<List<FormattedLocation>> search({
@@ -91,7 +95,7 @@ class Reverse {
       },
     );
     var response = await http.get(url);
-    var parsed = jsonDecode(response.body);
+    var parsed = jsonDecode(utf8.decode(response.bodyBytes));
     if (parsed is List) {
       List<FormattedLocation> resList = [];
       for (var loc in parsed) {
